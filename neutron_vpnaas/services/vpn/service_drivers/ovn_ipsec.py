@@ -14,6 +14,7 @@
 #    under the License.
 import collections
 import netaddr
+import oslo_messaging
 
 from neutron.common import rpc as n_rpc
 from neutron.common import utils as nutils
@@ -21,7 +22,6 @@ from neutron import context as nctx
 from neutron import manager
 from neutron.plugins.common import constants as service_constants
 from neutron_vpnaas.extensions.vpn_ext_gw import RouterIsNotVPNExternal
-from neutron_vpnaas.extensions.vpn_ext_gw import VPN_GW
 from neutron_vpnaas.services.vpn.common import topics
 from neutron_vpnaas.services.vpn.service_drivers import base_ipsec
 from neutron_vpnaas.services.vpn.service_drivers import ipsec_validator
@@ -32,6 +32,7 @@ from oslo_utils import uuidutils
 from networking_ovn.common import constants as ovn_const
 from networking_ovn.common import utils
 from networking_ovn.ovsdb import impl_idl_ovn
+
 
 LOG = logging.getLogger(__name__)
 
@@ -50,7 +51,6 @@ OvnPortInfo = collections.namedtuple('OvnPortInfo', ['type', 'options',
 
 
 class IPsecHelper(object):
-
     def __init__(self):
         self._nb_ovn = None
 
@@ -101,8 +101,8 @@ class IPsecHelper(object):
         ovn_port_info = OvnPortInfo(port_type, options, [addresses],
                                     port_security, parent_name, tag)
 
-        external_ids = {ovn_const.OVN_PORT_NAME_EXT_ID_KEY:
-                        port['port']['name']}
+        external_ids = {
+            ovn_const.OVN_PORT_NAME_EXT_ID_KEY: port['port']['name']}
         lswitch_name = self.get_transit_network(router_id)
 
         ovn_port = self._get_vpn_internal_port(router_id, port['port']['name'],
@@ -142,13 +142,13 @@ class IPsecHelper(object):
         return 'vr' + router_id
 
     def del_vpn_internal_port(self, host, router_id):
-        #port will be deleted when transit net deleted
+        # port will be deleted when transit net deleted
         pass
 
     def get_transit_network(self, router_id):
         switches = self._ovn.get_all_logical_switches_ids()
-        ext_ids = {ovn_const.OVN_NETWORK_NAME_EXT_ID_KEY:
-                   TRANSIT_NETWORK4VPN + '-' + router_id}
+        ext_id_key = TRANSIT_NETWORK4VPN + '-' + router_id
+        ext_ids = {ovn_const.OVN_NETWORK_NAME_EXT_ID_KEY: ext_id_key}
         for key in switches.keys():
             if switches[key] == ext_ids:
                 return key
@@ -168,9 +168,8 @@ class IPsecHelper(object):
         network = self.get_transit_network(router_id)
         if network:
             return network
-
-        ext_ids = {ovn_const.OVN_NETWORK_NAME_EXT_ID_KEY:
-                   TRANSIT_NETWORK4VPN + '-' + router_id}
+        ext_id_key = TRANSIT_NETWORK4VPN + '-' + router_id
+        ext_ids = {ovn_const.OVN_NETWORK_NAME_EXT_ID_KEY: ext_id_key}
         lswitch_name = utils.ovn_name(uuidutils.generate_uuid())
         with self._ovn.transaction(check_error=True) as txn:
             network = txn.add(self._ovn.create_lswitch(
@@ -278,10 +277,10 @@ class IPsecVpnOvnDriverCallBack(base_ipsec.IPsecVpnDriverCallBack):
         return self._OVNHelper
 
     def get_provider_network4vpn(self, context, router_id):
-        l3plugin = manager.NeutronManager.get_service_plugins().get(
-            service_constants.L3_ROUTER_NAT)
-        router = l3plugin.get_router(context, router_id)
-        network_id = router['vpn_external_gateway_info']['network_id']
+        vpn_plugin = manager.NeutronManager.get_service_plugins().get(
+            service_constants.VPN)
+        vpn_gw = vpn_plugin.get_vpn_gw_dict_by_router_id(context, router_id)
+        network_id = vpn_gw['network_id']
         plugin = manager.NeutronManager.get_plugin()
         net = plugin.get_network(context, network_id)
         return net
@@ -291,6 +290,9 @@ class IPsecVpnOvnDriverCallBack(base_ipsec.IPsecVpnDriverCallBack):
 
     def get_subnet_info(self, context, subnet_id=None):
         return self._IPsecHelper.get_subnet_by_id(subnet_id)
+
+    def get_vpn_transit_lip(self, context, router_id=None):
+        return VPN_TRANSIT_LIP
 
     def find_vpn_port(self, context, ptype=None, router_id=None,
                       host=None):
@@ -322,11 +324,14 @@ class BaseOvnIPsecVPNDriver(base_ipsec.BaseIPsecVPNDriver):
 
         If there are multiples, (arbitrarily) use the first one.
         """
-        if router[VPN_GW] is None or router[VPN_GW].port is None:
+        gateway = self.service_plugin.get_vpn_gw_dict_by_router_id(
+            nctx.get_admin_context(),
+            router['id'])
+        if gateway is None or gateway['external_fixed_ips'] is None:
             raise RouterIsNotVPNExternal(router_id=router['id'])
 
         v4_ip = v6_ip = None
-        for fixed_ip in router[VPN_GW].port['fixed_ips']:
+        for fixed_ip in gateway['external_fixed_ips']:
             addr = fixed_ip['ip_address']
             vers = netaddr.IPAddress(addr).version
             if vers == 4:
@@ -369,7 +374,7 @@ class BaseOvnIPsecVPNDriver(base_ipsec.BaseIPsecVPNDriver):
 
     def create_vpnservice(self, context, vpnservice_dict):
         super(BaseOvnIPsecVPNDriver, self).create_vpnservice(context,
-              vpnservice_dict)
+                                                             vpnservice_dict)
         self._setup(context, vpnservice_dict['id'])
         vpnservice = self.service_plugin._get_vpnservice(
             context, vpnservice_dict['id'])
@@ -378,7 +383,7 @@ class BaseOvnIPsecVPNDriver(base_ipsec.BaseIPsecVPNDriver):
     def delete_vpnservice(self, context, vpnservice):
         router_id = vpnservice['router_id']
         super(BaseOvnIPsecVPNDriver, self).delete_vpnservice(context,
-              vpnservice)
+                                                             vpnservice)
         services = self.service_plugin.get_vpnservices(context)
         router_ids = [s['router_id'] for s in services]
         if router_id not in router_ids:
@@ -388,22 +393,64 @@ class BaseOvnIPsecVPNDriver(base_ipsec.BaseIPsecVPNDriver):
     def create_ipsec_site_connection(self, context, ipsec_site_connection):
         self._set_requirements(context, ipsec_site_connection)
         super(BaseOvnIPsecVPNDriver, self).create_ipsec_site_connection(
-              context, ipsec_site_connection)
+            context, ipsec_site_connection)
 
     def delete_ipsec_site_connection(self, context, ipsec_site_connection):
         self._del_requirements(context, ipsec_site_connection)
         super(BaseOvnIPsecVPNDriver, self).delete_ipsec_site_connection(
-              context, ipsec_site_connection)
+            context, ipsec_site_connection)
 
     def update_ipsec_site_connection(
-        self, context, old_ipsec_site_connection, ipsec_site_connection):
+            self, context, old_ipsec_site_connection, ipsec_site_connection):
         self._del_requirements(context, old_ipsec_site_connection)
         self._set_requirements(context, ipsec_site_connection)
         super(BaseOvnIPsecVPNDriver, self).update_ipsec_site_connection(
-              context, old_ipsec_site_connection, ipsec_site_connection)
+            context, old_ipsec_site_connection, ipsec_site_connection)
 
 
-class IPsecOvnVpnAgentApi(base_ipsec.IPsecVpnAgentApi):
+class IPsecOvnVpnAgentApi(object):
+    target = oslo_messaging.Target(version=BASE_IPSEC_VERSION)
+
+    def __init__(self, topic, default_version, driver):
+        self.topic = topic
+        self.driver = driver
+        target = oslo_messaging.Target(topic=topic, version=default_version)
+        self.client = n_rpc.get_client(target)
+
+    def _agent_notification(self, context, method, router_id,
+                            version=None, **kwargs):
+        """Notify update for the agent.
+
+        This method will find where is the router, and
+        dispatch notification for the agent.
+        """
+        admin_context = context if context.is_admin else context.elevated()
+        if not version:
+            version = self.target.version
+
+        self.driver.service_plugin.schedule_routers(admin_context, [router_id])
+
+        vpn_agents = self.driver.service_plugin.get_vpn_agents_hosting_routers(
+            admin_context, [router_id],
+            admin_state_up=True,
+            active=True)
+
+        for vpn_agent in vpn_agents:
+            LOG.debug('Notify agent at %(topic)s.%(host)s the message '
+                      '%(method)s %(args)s',
+                      {'topic': self.topic,
+                       'host': vpn_agent.host,
+                       'method': method,
+                       'args': kwargs})
+            cctxt = self.client.prepare(server=vpn_agent.host, version=version)
+            cctxt.cast(context, method, **kwargs)
+
+    def vpnservice_updated(self, context, router_id, **kwargs):
+        """Send update event of vpnservices."""
+        kwargs['router'] = {'id': router_id}
+        self._agent_notification(context, 'vpnservice_updated', router_id,
+                                 **kwargs)
+
     def prepare_namespace(self, context, router_id, **kwargs):
         kwargs['router'] = {'id': router_id}
         self._agent_notification(context, 'prepare_namespace', router_id,
@@ -412,7 +459,7 @@ class IPsecOvnVpnAgentApi(base_ipsec.IPsecVpnAgentApi):
     def cleanup_namespace(self, context, router_id, **kwargs):
         kwargs['router'] = {'id': router_id}
         self._agent_notification(context, 'cleanup_namespace', router_id,
-                                **kwargs)
+                                 **kwargs)
 
 
 class IPsecOvnVPNDriver(BaseOvnIPsecVPNDriver):

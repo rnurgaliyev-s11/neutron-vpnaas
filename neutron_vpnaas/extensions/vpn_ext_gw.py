@@ -24,32 +24,58 @@ from neutron.api.v2 import attributes as attr
 from neutron.api.v2 import resource_helper
 from neutron.plugins.common import constants as nconstants
 
+from neutron_vpnaas._i18n import _
+
 
 class RouterIsNotVPNExternal(nexception.BadRequest):
     message = _("Router %(router_id)s has no VPN external network gateway set")
-    
-    
-VPN_GW = 'vpn_external_gateway_info'
-ROUTERS = 'routers'
+
+
+class RouterHasVPNExternal(nexception.BadRequest):
+    message = _(
+        "Router %(router_id)s already has VPN external network gateway")
+
+
+class VPNGWInUsed(nexception.BadRequest):
+    message = _(
+        "Gateway %(gateway_id)s is used by VPN services %(services)s")
+
+
+class VPNGWNotFound(nexception.NotFound):
+    message = _("VPN gateway for router %(router_id)s could not be found")
+
+
+VPN_GW = 'gateway_info'
 RESOURCE_ATTRIBUTE_MAP = {
-    ROUTERS: {
-        VPN_GW: {'allow_post': True, 'allow_put': True,
-                 'is_visible': True, 'default': None,
-                 'enforce_policy': True,
-                 'validate': {
-                     'type:dict_or_nodata': {
-                         'network_id': {'type:uuid': None,
-                                        'required': True},
-                         'external_fixed_ips': {
-                             'convert_list_to':
-                                 converters.convert_kvp_list_to_dict,
-                             'type:fixed_ips': None,
-                             'default': None,
-                             'required': False,
-                         }
-                     }
-                 }}
-    },
+    "gateways": {
+        'id': {'allow_post': False, 'allow_put': False,
+               'validate': {'type:uuid': None},
+               'is_visible': True,
+               'primary_key': True},
+        'tenant_id': {'allow_post': True, 'allow_put': False,
+                      'validate': {'type:string': attr.TENANT_ID_MAX_LEN},
+                      'required_by_policy': True,
+                      'is_visible': True},
+        'router_id': {'allow_post': True, 'allow_put': False,
+                      'validate': {'type:uuid': None},
+                      'is_visible': True},
+        'router_name': {'allow_post': False, 'allow_put': False,
+                        'validate': {'type:string': attr.NAME_MAX_LEN},
+                        'is_visible': True},
+        'network_id': {'allow_post': True, 'allow_put': True,
+                       'validate': {'type:uuid': None},
+                       'is_visible': True},
+        'external_fixed_ips': {'allow_post': True, 'allow_put': True,
+                               'is_visible': True, 'default': None,
+                               'enforce_policy': True,
+                               'convert_list_to':
+                                   converters.convert_kvp_list_to_dict,
+
+                               'subnet_id': {'type:uuid': None,
+                                             'required': True},
+                               'fixed_ips': None
+                               }
+    }
 }
 
 
@@ -61,7 +87,7 @@ class Vpn_ext_gw(extensions.ExtensionDescriptor):
 
     @classmethod
     def get_alias(cls):
-        return "vpn_ext_gw"
+        return "vpn-ext-gw"
 
     @classmethod
     def get_description(cls):
@@ -94,3 +120,26 @@ class Vpn_ext_gw(extensions.ExtensionDescriptor):
             return RESOURCE_ATTRIBUTE_MAP
         else:
             return {}
+
+
+@six.add_metaclass(abc.ABCMeta)
+class VPNExtGWPluginBase(object):
+    @abc.abstractmethod
+    def create_gateway(self, context, gateway):
+        pass
+
+    @abc.abstractmethod
+    def update_gateway(self, context, gateway_id, gateway):
+        pass
+
+    @abc.abstractmethod
+    def delete_gateway(self, context, gateway_id):
+        pass
+
+    @abc.abstractmethod
+    def get_gateway(self, context, gateway_id, fields=None):
+        pass
+
+    @abc.abstractmethod
+    def get_gateways(self, context, filters=None, fields=None):
+        pass
