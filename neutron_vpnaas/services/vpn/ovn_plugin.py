@@ -22,6 +22,7 @@ from neutron.common import constants as n_constants
 
 from neutron_vpnaas.db.vpn.vpn_db import VPNPluginDb
 
+from neutron_vpnaas.db.vpn import ovn_vpn
 from neutron_vpnaas.db.vpn import vpn_agentschedulers_db as agent_db
 from neutron_vpnaas.db.vpn import vpn_ext_gw_db
 from neutron_vpnaas.db.vpn import vpn_models
@@ -29,7 +30,8 @@ from neutron_vpnaas.db.vpn import vpn_models
 from neutron_vpnaas.services.vpn.plugin import VPNDriverPlugin
 
 
-class VPNOVNPlugin(VPNPluginDb,
+class VPNOVNPlugin(ovn_vpn.VPNOVNPluginDb,
+                   VPNPluginDb,
                    vpn_ext_gw_db.VPNExtGWPlugin_db,
                    agent_db.AZVPNAgentSchedulerDbMixin):
     """Implementation of the VPN Service Plugin.
@@ -70,3 +72,36 @@ class VPNOVNDriverPlugin(VPNOVNPlugin, VPNDriverPlugin):
         query = query.filter(
             agent_db.RouterVPNAgentBinding.vpn_agent_id == agent.id)
         return query
+
+    def create_vpnservice(self, context, vpnservice):
+        vpnservice = super(
+            VPNOVNDriverPlugin,self).create_vpnservice_ovn(context, vpnservice)
+        driver = self._get_driver_for_vpnservice(vpnservice)
+        driver.create_vpnservice(context, vpnservice)
+        return vpnservice
+
+    def create_ipsec_site_connection(self, context, ipsec_site_connection):
+        ipsec_site_connection = super(
+            VPNOVNDriverPlugin, self).create_ipsec_site_connection_ovn(
+            context, ipsec_site_connection)
+        driver = self._get_driver_for_ipsec_site_connection(
+            context, ipsec_site_connection)
+        driver.create_ipsec_site_connection(context, ipsec_site_connection)
+        return ipsec_site_connection
+
+    def update_ipsec_site_connection(
+            self, context,
+            ipsec_conn_id, ipsec_site_connection):
+        old_ipsec_site_connection = self.get_ipsec_site_connection(
+            context, ipsec_conn_id)
+        ipsec_site_connection = super(
+            VPNOVNDriverPlugin,self).update_ipsec_site_connection_ovn(
+            context,
+            ipsec_conn_id,
+            ipsec_site_connection)
+        driver = self._get_driver_for_ipsec_site_connection(
+            context, ipsec_site_connection)
+        driver.update_ipsec_site_connection(
+            context, old_ipsec_site_connection, ipsec_site_connection)
+        return ipsec_site_connection
+
