@@ -55,10 +55,32 @@ class IPsecHelper(object):
         self._nb_ovn = None
 
     @property
+    def l3_plugin(self):
+        return manager.NeutronManager.get_service_plugins().get(
+            service_constants.L3_ROUTER_NAT)
+
+    @property
     def _ovn(self):
-        if self._nb_ovn is None:
-            self._nb_ovn = impl_idl_ovn.OvsdbNbOvnIdl(self)
-        return self._nb_ovn
+        return self.l3_plugin._ovn
+
+    def get_logical_switch_port(self, name):
+        result = {}
+        for row in self._ovn._tables['Logical_Switch_Port'].rows.values():
+            if row.name == name:
+                result = {
+                    'addresses': row.addresses,
+                    'enabled': row.enabled,
+                    'external_ids': row.external_ids,
+                    'name': row.name,
+                    'options': row.options,
+                    'parent_name': row.parent_name,
+                    'port_security': row.port_security,
+                    'tag': row.port_security,
+                    'type': row.type,
+                    'up': row.up
+                }
+                return result
+        return result
 
     def _get_vpn_internal_port(self, router_id, port_name, host):
         lswitch_name = self.get_transit_network(router_id)
@@ -69,7 +91,7 @@ class IPsecHelper(object):
         for switch in switches:
             if switch['name'] == lswitch_name:
                 for switch_port in switch['ports']:
-                    ovn_port = self._ovn.get_logical_switch_port(switch_port)
+                    ovn_port = self.get_logical_switch_port(switch_port)
                     if ovn_port['external_ids'] == external_ids:
                         addresses = ovn_port['addresses'][0].split(' ')
                         ovn_port['mac_address'] = addresses[0]
@@ -408,15 +430,7 @@ class BaseOvnIPsecVPNDriver(base_ipsec.BaseIPsecVPNDriver):
             context, old_ipsec_site_connection, ipsec_site_connection)
 
 
-class IPsecOvnVpnAgentApi(object):
-    target = oslo_messaging.Target(version=BASE_IPSEC_VERSION)
-
-    def __init__(self, topic, default_version, driver):
-        self.topic = topic
-        self.driver = driver
-        target = oslo_messaging.Target(topic=topic, version=default_version)
-        self.client = n_rpc.get_client(target)
-
+class IPsecOvnVpnAgentApi(base_ipsec.IPsecVpnAgentApi):
     def _agent_notification(self, context, method, router_id,
                             version=None, **kwargs):
         """Notify update for the agent.
@@ -444,12 +458,6 @@ class IPsecOvnVpnAgentApi(object):
                        'args': kwargs})
             cctxt = self.client.prepare(server=vpn_agent.host, version=version)
             cctxt.cast(context, method, **kwargs)
-
-    def vpnservice_updated(self, context, router_id, **kwargs):
-        """Send update event of vpnservices."""
-        kwargs['router'] = {'id': router_id}
-        self._agent_notification(context, 'vpnservice_updated', router_id,
-                                 **kwargs)
 
     def prepare_namespace(self, context, router_id, **kwargs):
         kwargs['router'] = {'id': router_id}
