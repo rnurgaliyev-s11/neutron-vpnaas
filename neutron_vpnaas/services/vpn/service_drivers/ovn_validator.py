@@ -18,7 +18,6 @@ from neutron import context as nctx
 from neutron import manager
 from neutron.plugins.common import constants as nconstants
 
-from neutron_vpnaas._i18n import _LI
 from neutron_vpnaas.db.vpn import vpn_ext_gw_db
 
 from neutron_vpnaas.extensions import vpnaas
@@ -26,15 +25,19 @@ from neutron_vpnaas.services.vpn.service_drivers import ipsec_validator
 
 
 class OVNVpnValidator(ipsec_validator.IpsecVpnValidator):
-    # overwrite some validator function due to use vpn gw instead of external ip of router
+
+    # overwrite validator function to use vpn gw external ip
+
+    def __init__(self, service_plugin):
+        super(OVNVpnValidator, self).__init__(service_plugin)
 
     @property
     def vpn_plugin(self):
         try:
             return self._vpn_plugin
         except AttributeError:
-            self._vpn_plugin = manager.NeutronManager.get_service_plugins().get(
-                nconstants.VPN)
+            self._vpn_plugin = manager.NeutronManager.get_service_plugins().\
+	        get(nconstants.VPN)
             return self._vpn_plugin
 
     def _check_router(self, context, router_id):
@@ -57,5 +60,4 @@ class OVNVpnValidator(ipsec_validator.IpsecVpnValidator):
 
         raise vpnaas.ExternalNetworkHasNoSubnet(
             router_id=router.id,
-            ip_version='IPv6' if ip_version ==6 else "IPv4")
-
+            ip_version='IPv6' if ip_version == 6 else "IPv4")
