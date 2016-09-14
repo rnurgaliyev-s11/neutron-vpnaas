@@ -23,7 +23,7 @@ from neutron.plugins.common import constants as service_constants
 from neutron_vpnaas.extensions.vpn_ext_gw import RouterIsNotVPNExternal
 from neutron_vpnaas.services.vpn.common import topics
 from neutron_vpnaas.services.vpn.service_drivers import base_ipsec
-from neutron_vpnaas.services.vpn.service_drivers import ovn_validator as ipsec_validator
+from neutron_vpnaas.services.vpn.service_drivers import ovn_validator
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import uuidutils
@@ -363,7 +363,7 @@ class BaseOvnIPsecVPNDriver(base_ipsec.BaseIPsecVPNDriver):
         self._OVNHelper = None
         super(BaseOvnIPsecVPNDriver, self).__init__(
             service_plugin,
-            ipsec_validator.OVNVpnValidator(service_plugin))
+            ovn_validator.OVNVpnValidator(service_plugin))
 
     @property
     def _IPsecHelper(self):
