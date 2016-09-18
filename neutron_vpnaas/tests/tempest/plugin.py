@@ -1,3 +1,6 @@
+# Copyright 2015
+# All Rights Reserved.
+#
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
 #    a copy of the License at
@@ -10,17 +13,24 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import logging as sys_logging
 
-from oslo_reports import guru_meditation_report as gmr
+import os
 
-from neutron_vpnaas import version
+from tempest.test_discover import plugins
 
-# During the call to gmr.TextGuruMeditation.setup_autorun(), Guru Meditation
-# Report tries to start logging. Set a handler here to accommodate this.
-logger = sys_logging.getLogger(None)
-if not logger.handlers:
-    logger.addHandler(sys_logging.StreamHandler())
+import neutron_vpnaas
 
-_version_string = version.version_info.release_string()
-gmr.TextGuruMeditation.setup_autorun(version=_version_string)
+
+class VPNTempestPlugin(plugins.TempestPlugin):
+    def load_tests(self):
+        base_path = os.path.split(os.path.dirname(
+            os.path.abspath(neutron_vpnaas.__file__)))[0]
+        test_dir = "neutron_vpnaas/tests/tempest"
+        full_test_dir = os.path.join(base_path, test_dir)
+        return full_test_dir, base_path
+
+    def register_opts(self, conf):
+        pass
+
+    def get_opt_lists(self):
+        pass
