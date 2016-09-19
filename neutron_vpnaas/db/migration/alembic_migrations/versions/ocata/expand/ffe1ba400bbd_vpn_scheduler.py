@@ -1,4 +1,4 @@
-# Copyright 2016 <PUT YOUR NAME/COMPANY HERE>
+# Copyright 2016 MingShuang Xian/IBM
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -15,15 +15,15 @@
 
 """vpn scheduler
 
-Revision ID: 3b739d6906cf
-Revises: b0cf3ddc8fbc
-Create Date: 2016-08-15 03:32:46.124718
+Revision ID: ffe1ba400bbd
+Revises: 22e0145ac80b
+Create Date: 2016-09-18 17:55:58.623575
 
 """
 
 # revision identifiers, used by Alembic.
-revision = '3b739d6906cf'
-down_revision = 'b0cf3ddc8fbc'
+revision = 'ffe1ba400bbd'
+down_revision = '22e0145ac80b'
 
 from alembic import op
 import sqlalchemy as sa

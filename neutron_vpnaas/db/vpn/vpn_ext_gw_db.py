@@ -54,11 +54,10 @@ class VPNExtGW(model_base.BASEV2, models_v2.HasId, model_base.HasProject):
     __tablename__ = 'vpn_ext_gws'
     router_id = sa.Column(sa.String(36), sa.ForeignKey('routers.id'),
                           nullable=False)
-    port_id = sa.Column(sa.String(36),
-                        sa.ForeignKey('ports.id', ondelete="CASCADE"),
-                        primary_key=True)
-    port = orm.relationship(models_v2.Port)
-    router = orm.relationship(l3_db.Router)
+    port_id = sa.Column(sa.String(36), sa.ForeignKey('ports.id'),
+                        nullable=False)
+    port = orm.relationship(models_v2.Port, lazy='joined')
+    router = orm.relationship(l3_db.Router, lazy='joined')
 
 
 class VPNExtGWPlugin_db(vpn_ext_gw.VPNExtGWPluginBase, base_db.CommonDbMixin):
@@ -145,8 +144,7 @@ class VPNExtGWPlugin_db(vpn_ext_gw.VPNExtGWPluginBase, base_db.CommonDbMixin):
         ip_address_change = not ip_addresses == new_ip_addresses
         return ip_address_change
 
-    def _validate_gw_info(self, context, gw_port, info, ext_ips):
-        network_id = info['network_id'] if info else None
+    def _validate_gw_info(self, context, network_id, gw_port, ext_ips):
         if network_id:
             network_db = self._core_plugin._get_network(context, network_id)
             if not network_db.external:
@@ -183,12 +181,12 @@ class VPNExtGWPlugin_db(vpn_ext_gw.VPNExtGWPluginBase, base_db.CommonDbMixin):
         self._core_plugin.delete_port(admin_ctx, gateway_db.port['id'],
                                       l3_port_check=False)
 
-    def _create_vpn_router_gw_port(self, context, gateway, net_id, ext_ips):
+    def _create_vpn_router_gw_port(self, context, router_id, net_id, ext_ips):
         # Port has no 'tenant-id', as it is hidden from user
         port_data = {'tenant_id': '',  # intentionally not set
                      'network_id': net_id,
                      'fixed_ips': ext_ips or l3_constants.ATTR_NOT_SPECIFIED,
-                     'device_id': gateway['router_id'],
+                     'device_id': router_id,
                      'device_owner': DEVICE_OWNER_VPN_ROUTER_GW,
                      'admin_state_up': True, 'name': ''}
         gw_port = p_utils.create_port(self._core_plugin, context.elevated(),
@@ -204,18 +202,23 @@ class VPNExtGWPlugin_db(vpn_ext_gw.VPNExtGWPluginBase, base_db.CommonDbMixin):
         vpn_gw_port = None
         if gateway_db:
             vpn_gw_port = gateway_db.port
+            router_id = gateway_db['router_id']
+            net_id = vpn_gw_port['network_id']
+        else:
+            router_id = info['router_id']
+            net_id = info['network_id']
         ext_ips = info.get('external_fixed_ips') if info else []
         ext_ip_change = self._check_for_external_ip_change(context,
                                                            vpn_gw_port,
                                                            ext_ips)
-        net_id = self._validate_gw_info(context, vpn_gw_port, info, ext_ips)
+        net_id = self._validate_gw_info(context, net_id, vpn_gw_port, ext_ips)
         if vpn_gw_port and ext_ip_change and vpn_gw_port[
             'network_id'] == net_id:
             return self._update_current_vpn_gw_port(context, gateway_db,
                                                     ext_ips)
         else:
             self._delete_current_vpn_gw_port(context, gateway_db, net_id)
-            return self._create_vpn_router_gw_port(context, info, net_id,
+            return self._create_vpn_router_gw_port(context, router_id, net_id,
                                                    ext_ips)
 
     def get_vpn_gw_by_router_id(self, context, router_id):

@@ -1,4 +1,4 @@
-# Copyright 2016 <MingShuang Xian/IBM>
+# Copyright 2016 MingShuang Xian/IBM
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
@@ -15,14 +15,14 @@
 
 """add vpn gateway port
 
-Revision ID: b0cf3ddc8fbc
+Revision ID: 22e0145ac80b
 Revises: 52783a36bd67
-Create Date: 2016-07-11 14:28:46.052425
+Create Date: 2016-09-18 09:01:18.660362
 
 """
 
 # revision identifiers, used by Alembic.
-revision = 'b0cf3ddc8fbc'
+revision = '22e0145ac80b'
 down_revision = '52783a36bd67'
 
 from alembic import op
@@ -41,14 +41,6 @@ def upgrade():
         sa.Column('router_id', sa.String(length=36), nullable=False),
         sa.Column('port_id', sa.String(length=36), nullable=False),
         sa.PrimaryKeyConstraint('id'),
-        sa.ForeignKeyConstraint(
-            ['router_id'],
-            ['routers.id'],
-            ondelete='CASCADE'
-        ),
-        sa.ForeignKeyConstraint(
-            ['port_id'],
-            ['ports.id'],
-            ondelete='CASCADE'
-        ),
+        sa.ForeignKeyConstraint(['router_id'], ['routers.id'], ),
+        sa.ForeignKeyConstraint(['port_id'], ['ports.id'], ),
     )

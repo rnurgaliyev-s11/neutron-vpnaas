@@ -35,9 +35,9 @@ from neutron import wsgi
 LOG = logging.getLogger(__name__)
 
 
-VPN_ROUTER = 'vpn-router'
+VPN_ROUTER = 'l3-router'
 VPN_ROUTERS = VPN_ROUTER + 's'
-VPN_AGENT = 'vpn-agent'
+VPN_AGENT = 'l3-agent'
 VPN_AGENTS = VPN_AGENT + 's'
 
 
