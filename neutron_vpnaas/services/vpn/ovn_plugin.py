@@ -24,14 +24,16 @@ from neutron_vpnaas.db.vpn.vpn_db import VPNPluginDb
 
 from neutron_vpnaas.db.vpn import vpn_agentschedulers_db as agent_db
 from neutron_vpnaas.db.vpn import vpn_ext_gw_db
+from neutron_vpnaas.db.vpn import vpn_hamode_db
+from neutron_vpnaas.db.vpn import vpn_hascheduler_db as vpn_hascheduler_db
 from neutron_vpnaas.db.vpn import vpn_models
 
 from neutron_vpnaas.services.vpn.plugin import VPNDriverPlugin
 
-
 class VPNOVNPlugin(VPNPluginDb,
                    vpn_ext_gw_db.VPNExtGWPlugin_db,
-                   agent_db.AZVPNAgentSchedulerDbMixin):
+                   vpn_hascheduler_db.VPN_HA_scheduler_db_mixin,
+                   vpn_hamode_db.VPN_HA_Router_db_mixin):
     """Implementation of the VPN Service Plugin.
 
     This class manages the workflow of VPNaaS request/response.

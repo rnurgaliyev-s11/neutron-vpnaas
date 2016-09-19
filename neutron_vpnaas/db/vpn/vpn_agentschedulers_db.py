@@ -170,7 +170,7 @@ class VPNAgentSchedulerDbMixin(vpn_agentschedulers.VPNAgentSchedulerPluginBase,
             if binding.vpn_agent_id == agent_id:
                 # router already bound to the agent we need
                 return False
-        if router.get('ha'):
+        if self.vpn_router_is_ha(context, router_id):
             return True
         # legacy router case: router is already bound to some agent
         raise vpn_agentschedulers.RouterHostedByL3Agent(
@@ -183,7 +183,7 @@ class VPNAgentSchedulerDbMixin(vpn_agentschedulers.VPNAgentSchedulerPluginBase,
         agent_id = agent['id']
         if self.vpn_scheduler:
             try:
-                if router.get('ha'):
+                if self.vpn_router_is_ha(context, router_id):
                     plugin = manager.NeutronManager.get_service_plugins().get(
                         service_constants.VPN)
                     self.vpn_scheduler.create_ha_port_and_bind(
@@ -199,7 +199,7 @@ class VPNAgentSchedulerDbMixin(vpn_agentschedulers.VPNAgentSchedulerPluginBase,
     def add_router_to_vpn_agent(self, context, agent_id, router_id):
         """Add a vpn agent to host a router."""
         with context.session.begin(subtransactions=True):
-            router = self.get_router(context, router_id)
+            router = self.l3_plugin.get_router(context, router_id)
             agent = self._get_agent(context, agent_id)
             self.validate_agent_router_combination(context, agent, router)
             if not self.check_agent_router_scheduling_needed(
@@ -222,11 +222,10 @@ class VPNAgentSchedulerDbMixin(vpn_agentschedulers.VPNAgentSchedulerPluginBase,
 
         self._unbind_router(context, router_id, agent_id)
 
-        router = self.get_router(context, router_id)
-        plugin = manager.NeutronManager.get_service_plugins().get(
-            service_constants.VPN)
-        if router.get('ha'):
-            plugin.delete_ha_interfaces_on_host(context, router_id, agent.host)
+        #plugin = manager.NeutronManager.get_service_plugins().get(
+        #    service_constants.VPN)
+        if self.vpn_router_is_ha(context, router_id):
+            self.delete_ha_interfaces_on_host(context, router_id, agent.host)
         retain_router = False
         vpn_notifier = self.agent_notifiers.get(constants.AGENT_TYPE_L3)
         if retain_router and vpn_notifier:

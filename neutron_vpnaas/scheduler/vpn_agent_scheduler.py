@@ -33,23 +33,23 @@ from neutron.common import constants
 from neutron.common import utils
 from neutron.db import api as db_api
 from neutron.db import l3_db
-from neutron.db import l3_hamode_db
 from neutron.extensions import availability_zone as az_ext
 from neutron.extensions import l3
 from neutron.plugins.common.constants import L3_ROUTER_NAT
 
 from neutron_vpnaas.db.vpn import vpn_agentschedulers_db
+from neutron_vpnaas.db.vpn import vpn_hamode_db
 
 LOG = logging.getLogger(__name__)
-cfg.CONF.register_opts(l3_hamode_db.L3_HA_OPTS)
+cfg.CONF.register_opts(vpn_hamode_db.VPN_HA_OPTS)
 
 
 @six.add_metaclass(abc.ABCMeta)
 class VPNScheduler(object):
 
     def __init__(self):
-        self.min_ha_agents = cfg.CONF.min_l3_agents_per_router
-        self.max_ha_agents = cfg.CONF.max_l3_agents_per_router
+        self.min_ha_agents = cfg.CONF.min_vpn_agents_per_router
+        self.max_ha_agents = cfg.CONF.max_vpn_agents_per_router
 
     @property
     def l3_plugin(self):
@@ -91,6 +91,7 @@ class VPNScheduler(object):
     def _get_unscheduled_routers(self, context, plugin):
         """Get routers with no agent binding."""
         # TODO(gongysh) consider the disabled agent's router
+        # TODO(Xianms) the router id should be from vpn DB for vpn agent
         no_agent_binding = ~sql.exists().where(
             l3_db.Router.id ==
             vpn_agentschedulers_db.RouterVPNAgentBinding.router_id)
@@ -196,7 +197,7 @@ class VPNScheduler(object):
 
     def _bind_routers(self, context, plugin, routers, vpn_agent):
         for router in routers:
-            if router.get('ha'):
+            if plugin.vpn_router_is_ha(context, router['id']):
                 if not self._router_has_binding(context, router['id'],
                                                 vpn_agent.id):
                     self.create_ha_port_and_bind(
@@ -235,7 +236,7 @@ class VPNScheduler(object):
             plugin, context, sync_router)
         if not candidates:
             return
-        elif sync_router.get('ha', False):
+        elif plugin.vpn_router_is_ha(context, router_id):
             chosen_agents = self._bind_ha_router(plugin, context,
                                                  router_id, candidates)
             if not chosen_agents:
