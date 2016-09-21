@@ -22,7 +22,8 @@ from neutron.plugins.common import constants as service_constants
 from neutron_vpnaas.extensions.vpn_ext_gw import RouterIsNotVPNExternal
 from neutron_vpnaas.services.vpn.common import topics
 from neutron_vpnaas.services.vpn.service_drivers import base_ipsec
-from neutron_vpnaas.services.vpn.service_drivers import ipsec_validator
+from neutron_vpnaas.services.vpn.service_drivers import \
+    ovn_validator as ipsec_validator
 from oslo_log import log as logging
 
 
@@ -70,6 +71,7 @@ def ovn_lrouter_port_name(id):
     # lrp stands for Logical Router Port
     return 'lrp-%s' % id
 
+
 def ovn_name(id):
     # The name of the OVN entry will be neutron-<UUID>
     # This is due to the fact that the OVN application checks if the name
@@ -78,17 +80,21 @@ def ovn_name(id):
     # updating, deleting etc.
     return 'neutron-%s' % id
 
+
 def ovn_transit_ls_name(id):
     "Ovn Transit Logical Switch"
     return '%s-%s' % (OVN_TRANSIT_LS_NAME_PREFIX, id)
+
 
 def ovn_vdtsp_name(id):
     "Distributed Transit switch port"
     return 'vdtsp-%s' % id
 
+
 def ovn_vtsp_name(vtsp, id):
     "Distributed Transit switch port"
     return '%s-%s' % (vtsp, id)
+
 
 class IPsecHelper(object):
     def __init__(self):
@@ -113,17 +119,17 @@ class IPsecHelper(object):
     def _admin_net(self):
         return self.l3_plugin._admin_net
 
-    def get_vpn_transit_port_names(self, agent_number = 1):
+    def get_vpn_transit_port_names(self, agent_number=1):
         name = ['vdtsp']
         for agent in range(agent_number):
-            name.append('vtsp'+str(agent))
+            name.append('vtsp' + str(agent))
 
-        #HA is enabled if there are more than one agents for the router
+        # HA is enabled if there are more than one agents for the router
         if agent_number > 1:
             name.append('vip')
         return name
 
-    def _get_transit_network_ports(self, router_id, agent_number = 1,
+    def _get_transit_network_ports(self, router_id, agent_number=1,
                                    create=False):
         name = self.get_vpn_transit_port_names(agent_number)
         transit_net_ports = {}
@@ -138,9 +144,9 @@ class IPsecHelper(object):
             key = port.get('name').lower()
 
             # convert neutron port name to ovn port name
-            if port.get('name') =='vdtsp':
+            if port.get('name') == 'vdtsp':
                 port['name'] = ovn_vdtsp_name(router_id)
-            elif port.get('name') =='vip':
+            elif port.get('name') == 'vip':
                 pass
             else:
                 port['name'] = ovn_vtsp_name(port['name'], router_id)
@@ -218,17 +224,18 @@ class IPsecHelper(object):
                     # 3. Delete vdtsp port
                     txn.add(self._ovn.delete_lswitch_port(vdtsp_name,
                                                           lswitch_name))
-            # 6. Delete transit logical switch
-            #TODO fix deleting the ovn switch
-            #txn.add(self._ovn.delete_lswitch(lswitch_name))
+                    # 6. Delete transit logical switch
+                    # TODO fix deleting the ovn switch
+                    # txn.add(self._ovn.delete_lswitch(lswitch_name))
 
     def _join_transit_and_lrouter(self, router_id):
         ts_ports = self._get_transit_network_ports(router_id,
-                                                   OVN_MAX_HA_AGENTS)
+                                                   OVN_MAX_HA_AGENTS,
+                                                   create=True)
         vdtsp = {'vdtsp': ts_ports['vdtsp']}
         self._join_lrouter_and_namespace(router_id, vdtsp)
 
-    #find a free vtsp port for the agent and add it to transit network
+    # find a free vtsp port for the agent and add it to transit network
     def _join_transit_and_agent(self, context, router_id):
         agents = self.service_plugin.get_ha_router_port_bindings(context,
                                                                  [router_id])
@@ -252,7 +259,7 @@ class IPsecHelper(object):
 
     def _disjoin_transit_and_agent(self, context, router_id, port_id):
         port = self._admin_net._plugin.get_port(context, port_id)
-        agent_port = {port['name']:port}
+        agent_port = {port['name']: port}
         self._disjoin_lrouter_and_namespace(router_id, agent_port)
 
     def _disjoin_transit_and_agents(self, context, router_id):
@@ -262,7 +269,7 @@ class IPsecHelper(object):
         ts_ports.pop('vdtsp')
         self._disjoin_lrouter_and_namespace(router_id, ts_ports)
 
-    #get both namespace ip and vdtsp port ip
+    # get both namespace ip and vdtsp port ip
     def get_vpn_nexthop_ip(self, context, router_id):
         is_ha = self.service_plugin.vpn_router_is_ha(context, router_id)
         ts_ports = self._get_transit_network_ports(router_id,
@@ -396,7 +403,7 @@ class BaseOvnIPsecVPNDriver(base_ipsec.BaseIPsecVPNDriver):
         self._OVNHelper = None
         super(BaseOvnIPsecVPNDriver, self).__init__(
             service_plugin,
-            ipsec_validator.IpsecVpnValidator(service_plugin))
+            ipsec_validator.OVNVpnValidator(service_plugin))
 
     @property
     def _IPsecHelper(self):
