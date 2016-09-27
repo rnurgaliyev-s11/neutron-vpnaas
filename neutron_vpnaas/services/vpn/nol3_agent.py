@@ -26,8 +26,6 @@ from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_service import loopingcall
 
-#from neutron._i18n import _, _LE, _LI, _LW
-
 from neutron_lib import constants as lib_const
 
 from neutron_vpnaas._i18n import _, _LE, _LI, _LW
@@ -39,19 +37,9 @@ vpn_agent_opts = [
     cfg.MultiStrOpt(
         'vpn_device_driver',
         default=['neutron_vpnaas.services.vpn.device_drivers.'
-                 'ipsec.OpenSwanDriver'],
-        sample_default=['neutron_vpnaas.services.vpn.device_drivers.ipsec.'
-                       'OpenSwanDriver, '
-                       'neutron_vpnaas.services.vpn.device_drivers.'
-                       'cisco_ipsec.CiscoCsrIPsecDriver, '
-                       'neutron_vpnaas.services.vpn.device_drivers.'
-                       'vyatta_ipsec.VyattaIPSecDriver, '
-                       'neutron_vpnaas.services.vpn.device_drivers.'
-                       'strongswan_ipsec.StrongSwanDriver, '
-                       'neutron_vpnaas.services.vpn.device_drivers.'
-                       'fedora_strongswan_ipsec.FedoraStrongSwanDriver, '
-                       'neutron_vpnaas.services.vpn.device_drivers.'
-                       'libreswan_ipsec.LibreSwanDriver'],
+                 'ovn_ipsec.OvnSwanDriver'],
+        sample_default=['neutron_vpnaas.services.vpn.device_drivers.'
+                       'ovn_ipsec.OvnSwanDriver'],
         help=_("The vpn device drivers Neutron will use")),
 ]
 cfg.CONF.register_opts(vpn_agent_opts, 'vpnagent')
@@ -60,7 +48,6 @@ cfg.CONF.register_opts(vpn_agent_opts, 'vpnagent')
 class Nol3VPNAgent(manager.Manager):
     """VPNAgent class which can handle vpn service drivers."""
     def __init__(self, host, conf=None):
-        #super(VPNAgent, self).__init__(host=host, conf=conf)
         if conf:
             self.conf = conf
         else:
@@ -70,18 +57,11 @@ class Nol3VPNAgent(manager.Manager):
         self.context = n_context.get_admin_context_without_session()
 
         self.agent_state = {
-            'binary': 'neutron-vpn-agent',
+            'binary': 'neutron-nol3vpn-agent',
             'host': host,
             'availability_zone': self.conf.AGENT.availability_zone,
             'topic': topics.L3_AGENT,
             'configurations': {
-                'agent_mode': self.conf.agent_mode,
-                #'router_id': self.conf.router_id,
-                'handle_internal_only_routers':
-                    self.conf.handle_internal_only_routers,
-                'external_network_bridge': self.conf.external_network_bridge,
-                'gateway_external_network_id':
-                    self.conf.gateway_external_network_id,
                 'interface_driver': self.conf.interface_driver,
                 'log_agent_heartbeats': self.conf.AGENT.log_agent_heartbeats},
             'start_flag': True,
