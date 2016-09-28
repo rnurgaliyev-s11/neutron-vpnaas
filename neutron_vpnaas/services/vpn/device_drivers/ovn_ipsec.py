@@ -92,7 +92,7 @@ class DeviceManager(object):
             interface_name = p['name']
             self.driver.unplug(interface_name, namespace=namespace)
 
-    def del_external_port(self, gateway_ip, process_id):
+    def del_external_port(self, process_id):
         namespace = self.get_namespace_name(process_id)
         device = ip_lib.IPDevice(None, namespace=namespace)
         ports = device.addr.list()
@@ -242,7 +242,14 @@ class OvnSwanDriver(ipsec.IPsecDriver):
         process_id = router['id']
 
         self.devmgr.del_internal_port(process_id)
-        self.devmgr.del_external_port(None, process_id)
+        self.devmgr.del_external_port(process_id)
+
+        ns_name = self.devmgr.get_namespace_name(process_id)
+        self.nsmgr.delete(ns_name)
+        if self.iptables_managers.get(process_id):
+            del self.iptables_managers[process_id]
+        if self.routers.get(process_id):
+            del self.routers[process_id]
 
     def get_namespace(self, router_id):
         """Get namespace of router.
@@ -311,8 +318,8 @@ class OvnSwanDriver(ipsec.IPsecDriver):
                                               vpnservice=vpnservice)
                 self._update_route(vpnservice)
                 self._update_nat(vpnservice, self.add_nat_rule)
+                ns = self.get_namespace(vpnservice['router_id'])
                 if self.conf.meter.vpn_meter_enable:
-                    ns = self.get_namespace(vpnservice['router_id'])
                     self.metermgr.update_metering(process, ns, False)
                 router = self.routers.get(vpnservice['router_id'])
                 if not router:
